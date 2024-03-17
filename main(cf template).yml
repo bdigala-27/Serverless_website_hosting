@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template for S3 static website with CloudFront distribution
+
+Parameters:
+  BucketName:
+    Type: String
+    Default: your-bucket-name
+  OrganizationName: 
+    Type: String
+    Default: your-organization-name
+  WorkspaceName:
+    Type: String  
+    Default: your-workspace-name
+
+Resources:
+
+  WebsiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+
+  WebsiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebsiteBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Join ['', ['arn:aws:s3:::', !Ref WebsiteBucket, '/*']]
+
+  WebsiteContentIndex:
+    Type: AWS::S3::Object
+    Properties:
+      Bucket: !Ref WebsiteBucket
+      Key: index.html
+      Source: ./content/index.html
+      ContentType: text/html
+
+  WebsiteContentStyle:
+    Type: AWS::S3::Object  
+    Properties:
+      Bucket: !Ref WebsiteBucket
+      Key: style.css
+      Source: ./content/style.css
+      ContentType: text/css
+
+  WebsiteContentError:
+    Type: AWS::S3::Object
+    Properties:
+      Bucket: !Ref WebsiteBucket
+      Key: error.html  
+      Source: ./content/error.html
+      ContentType: text/html
+
+  WebsiteBucketWebsiteConfiguration:  
+    Type: AWS::S3::BucketWebsiteConfiguration
+    Properties:
+      Bucket: !Ref WebsiteBucket
+      IndexDocument: index.html
+      ErrorDocument: error.html
+
+  WebsiteCloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        DefaultCacheBehavior:
+          AllowedMethods: 
+            - GET
+            - HEAD  
+          CachedMethods:
+            - GET
+            - HEAD
+          ForwardedValues:
+            QueryString: 'false'
+            Headers: 
+              - Origin
+              - Access-Control-Request-Headers
+              - Access-Control-Request-Method
+            Cookies:
+              Forward: none
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          MinTTL: 0
+          DefaultTTL: 3600 
+          MaxTTL: 86400
+        Enabled: true
+        HttpVersion: 'http2'
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt WebsiteBucket.RegionalDomainName
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+
+Outputs:
+
+  WebsiteURL:
+    Value: !GetAtt WebsiteBucket.WebsiteURL
+    Description: URL for website hosted on S3
+    
+  WebsiteCloudFrontURL:  
+    Value: !GetAtt WebsiteCloudFrontDistribution.DomainName
+    Description: CloudFront Distribution URL
